@@ -4,14 +4,17 @@
 #include <print.h>
 #include <avr/wdt.h>
 
-//Parameter of trackball sensitivity [ms] (recommemd : up to 50 )
-#define DELAY_TIME 30
+//Parameter of trackball sensitivity [ms]
+#define DELAY_TIME 24
+
+#define TBcountMAX DELAY_TIME/4
 
 bool mouse_btn1;
 bool mouse_btn2;
 bool wheel;
 bool tb_btn1;
 bool tb_btn2;
+int tbcount = 0;
 
 enum MOTION_REG_ADDR
 {
@@ -98,7 +101,7 @@ void pointing_device_init(void) {
   i2c_master_write(0x01);
   i2c_master_write(CONFIG_REG_I2C_SPEED);
   i2c_master_write(0X64);
-  i2c_master_write(0);
+  i2c_master_write(0X0);
   i2c_master_stop();
 
   wait_ms(100);
@@ -168,59 +171,77 @@ i2c_error:
 
 void pointing_device_task() {
 
-  uint8_t right = trackball_read(MOTION_REG_UP);
-  uint8_t left = trackball_read(MOTION_REG_DOWN);
-  uint8_t up = trackball_read(MOTION_REG_LEFT);
-  uint8_t down = trackball_read(MOTION_REG_RIGHT);
-  uint8_t botton = trackball_read(MOTION_REG_CONFIRM);
-
   report_mouse_t currentReport = pointing_device_get_report();
 
-  if (wheel == true){
+  if (tbcount == TBcountMAX){
+    uint8_t right = trackball_read(MOTION_REG_UP);
+    uint8_t left = trackball_read(MOTION_REG_DOWN);
+    uint8_t up = trackball_read(MOTION_REG_LEFT);
+    uint8_t down = trackball_read(MOTION_REG_RIGHT);
+    uint8_t button = trackball_read(MOTION_REG_CONFIRM);
 
-    currentReport.v = down-up;
+    if (wheel == true){
 
-  }else{
+      currentReport.v = down-up;
 
-    //Parameter of trackball sensitivity
-    currentReport.x = abs(left-right) * (left-right);
-    currentReport.y = abs(up-down) * (up-down);
+    }else{
 
+      //Parameter of trackball sensitivity
+      currentReport.x = abs(left-right) * (left-right);
+      currentReport.y = abs(up-down) * (up-down);
+
+    }
+
+  	
+    //Trackball click action
+    if (button == 0x01){
+      tb_btn1 = true;   //left click
+      //tb_btn2 = true;     //right click
+
+    }
+    else {
+      tb_btn1 = false;   //left click
+      //tb_btn2 = false;     //right click
+
+    }
+
+    if ((mouse_btn1 == true) || (tb_btn1 == true)){
+      currentReport.buttons |= MOUSE_BTN1;
+    }else{
+      currentReport.buttons &= ~MOUSE_BTN1;
+    }
+
+    if ((mouse_btn2 == true) || (tb_btn2 == true)){
+      currentReport.buttons |= MOUSE_BTN2;
+    }else{
+      currentReport.buttons &= ~MOUSE_BTN2;
+    }
+
+    pointing_device_set_report(currentReport);
+    pointing_device_send();
+    
+    tbcount = 0;
+  	
+  } else {
+
+    if ((mouse_btn1 == true) || (tb_btn1 == true)){
+      currentReport.buttons |= MOUSE_BTN1;
+    }else{
+      currentReport.buttons &= ~MOUSE_BTN1;
+    }
+
+    if ((mouse_btn2 == true) || (tb_btn2 == true)){
+      currentReport.buttons |= MOUSE_BTN2;
+    }else{
+      currentReport.buttons &= ~MOUSE_BTN2;
+    }
+
+    pointing_device_set_report(currentReport);
+    pointing_device_send();
   }
 
-	
-  //Trackball click action
-  if (botton == 0x01){
-    tb_btn1 = true;   //left click
-  	println("clicked");
-    //tb_btn2 = true;     //right click
-
-  }
-  else {
-    tb_btn1 = false;   //left click
-    //tb_btn2 = false;     //right click
-
-  }
-
-  if ((mouse_btn1 == true) || (tb_btn1 == true)){
-    currentReport.buttons |= MOUSE_BTN1;
-  }else{
-    currentReport.buttons &= ~MOUSE_BTN1;
-  }
-
-  if ((mouse_btn2 == true) || (tb_btn2 == true)){
-    currentReport.buttons |= MOUSE_BTN2;
-  }else{
-    currentReport.buttons &= ~MOUSE_BTN2;
-  }
-
-  pointing_device_set_report(currentReport);
-  pointing_device_send();
-  
-  
-  wait_ms(DELAY_TIME);
-
-	
+  wait_ms(4);
+  tbcount++;
   
 return;
 
